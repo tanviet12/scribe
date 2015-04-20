@@ -1,60 +1,70 @@
-#! /bin/sh
+#!/bin/sh
 #
-# skeleton	example file to build /etc/init.d/ scripts.
-#		This file should be used to construct scripts for /etc/init.d.
+# scribed - this script starts and stops the scribed daemon
 #
-#		Written by Miquel van Smoorenburg <miquels@cistron.nl>.
-#		Modified for Debian 
-#		by Ian Murdock <imurdock@gnu.ai.mit.edu>.
-#
-# Version:	@(#)skeleton  1.9  26-Feb-2001  miquels@cistron.nl
-#
+# chkconfig:   - 84 16
+# description:  Scribe is a server for aggregating log data \
+#               streamed in real time from a large number of \
+#               servers.
+# processname: scribed
+# config:      /etc/scribed/scribed.conf
+# config:      /etc/sysconfig/scribed
+# pidfile:     /var/run/scribed.pid
 
-export PYTHONPATH=$PYTHONPATH:/usr/lib/python2.6/site-packages
+# Source function library
+. /etc/rc.d/init.d/functions
+SCRIBED_CONFIG="/etc/scribe/scribe.conf"
+run="/usr/local/bin/scribed"
+run_ctrl="/usr/local/bin/scribe_ctrl"
+user="scribe"
+prog=$(basename $run)
 
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON=/usr/bin/scribed
-NAME=scribe
-DESC=scribe
-DAEMON_OPTS="-c /etc/scribe/scribe.conf"
-SCRIBE_CTRL=/usr/bin/scribe_ctrl
+[ -e /etc/sysconfig/$prog ] && . /etc/sysconfig/$prog
 
-test -x $DAEMON || exit 0
+port=$(egrep "^port=" $SCRIBED_CONFIG | awk -F"=" '{ print $2 }')
 
-# Include scribe defaults if available
-if [ -f /etc/default/scribe ] ; then
-	. /etc/default/scribe
-fi
+lockfile=/var/lock/subsys/scribed
 
-set -e
+start() {
+        echo -n $"Starting $prog: "
+        $run -c $SCRIBED_CONFIG > /dev/null 2>&1 &
+        RETVAL=$?
+        if [ $RETVAL -eq 0 ]; then
+                success
+                touch $lockfile
+        fi
+        echo
+        return $RETVAL
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    $run_ctrl stop $port
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && rm -f $lockfile
+    return $retval
+}
+
+status() {
+    $run_ctrl status $port
+}
+
+restart() {
+    stop
+    start
+}
+
+reload() {
+    echo "Probably not implemented."
+    $run_ctrl reload $port
+}
 
 case "$1" in
-  start)
-	echo -n "Starting $DESC: "
-	start-stop-daemon --start --quiet --background --exec $DAEMON -- $DAEMON_OPTS
-	echo "$NAME."
-	;;
-  stop)
-	echo -n "Stopping $DESC: "
-	$SCRIBE_CTRL stop
-	echo "$NAME."
-	;;
-  reload)
-	echo "Reloading $DESC configuration files."
-	$SCRIBE_CTRL reload
-  	;;
-  restart)
-    echo -n "Restarting $DESC: "
-	$SCRIBE_CTRL stop
-	sleep 1
-	start-stop-daemon --start --quiet --background --exec $DAEMON -- $DAEMON_OPTS
-	echo "$NAME."
-	;;
-  *)
-	N=/etc/init.d/$NAME
-	echo "Usage: $N {start|stop|restart|reload}" >&2
-	exit 1
-	;;
+    start|stop|restart|status|reload)
+        $1
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|reload}"
+        exit 2
 esac
-
-exit 0
